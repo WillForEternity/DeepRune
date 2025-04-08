@@ -11,6 +11,8 @@
 
 ### For my own usage, here is a tutorial for how to get the smoke-test running that should work for almost everyone, however I'm using an m3 macbook air. 
 
+Presentation on model architecture: https://www.canva.com/design/DAGjvjNkv3Q/IsjFnwWxU_1YI2Y3RQzgcQ/edit?utm_content=DAGjvjNkv3Q&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+
 --
 
 DEEPRUNE (CIRCUIT TRAINING SMOKE TEST SETUP & RESTART GUIDE)
