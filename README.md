@@ -15,219 +15,232 @@ Presentation on model architecture: https://www.canva.com/design/DAGjvjNkv3Q/Isj
 
 --
 
-DEEPRUNE (CIRCUIT TRAINING SMOKE TEST SETUP & RESTART GUIDE)
+# DeepRune: Circuit Training Smoke Test Setup & Restart Guide
 
-This document outlines the steps taken to set up and run the circuit_training smoke test on a cloud GPU instance (initially a Lambda Labs A100). It also provides instructions for quickly restarting the environment on a new instance. The goal is to verify the environment and core functionality using a personal fork named DeepRune.
+This document outlines the steps to set up and run the circuit_training smoke test on a cloud GPU instance (initially a Lambda Labs A100). It also provides instructions for quickly restarting the environment on a new instance. The goal is to verify the environment and core functionality using a personal fork named DeepRune.
 
-PREREQUISITES
+## Prerequisites
 
-*   A GitHub account.
-*   An SSH client (e.g., Terminal on macOS/Linux, PuTTY on Windows).
-*   Access to a GPU cloud instance provider (e.g., Lambda Labs, RunPod). Instance used initially: Lambda Labs gpu_1x_a100_sxm4.
-*   Docker Hub account (Optional, but highly recommended for saving built images).
-*   Basic familiarity with the command line.
+- A GitHub account
+- An SSH client (e.g., Terminal on macOS/Linux, PuTTY on Windows)
+- Access to a GPU cloud instance provider (e.g., Lambda Labs, RunPod)
+- Docker Hub account (Optional, but recommended for saving built images)
+- Basic familiarity with the command line
 
-INITIAL SETUP STEPS (Performed on First Instance)
+## Initial Setup Steps
 
-These steps detail the process followed on the *first* remote cloud instance via SSH.
+These steps detail the process for the *first* remote cloud instance via SSH.
 
-1. Connect to the Remote Instance
+### 1. Connect to the Remote Instance
 
-Connect to your provisioned cloud instance using SSH. The specific command will depend on your provider and configuration.
+Connect to your provisioned cloud instance using SSH:
 
-  # Example command
-  ssh user@<instance_ip_address> -p <port_if_needed>
+```bash
+ssh user@<instance_ip_address> -p <port_if_needed>
+```
 
 Verify Docker is installed and working:
 
-  docker run hello-world
+```bash
+docker run hello-world
+```
 
-2. Clone and Prepare the Code Repository
+### 2. Clone and Prepare the Code Repository
 
-Instead of cloning the original repository, we clone a personal fork to allow for modifications and pull requests. The local directory is named DeepRune.
+Clone a personal fork to allow for modifications and pull requests:
 
-  # Install git if necessary (some minimal images might not have it)
-  # sudo apt update && sudo apt install git -y
+```bash
+# Install git if necessary
+# sudo apt update && sudo apt install git -y
 
-  # Clone your fork (replace YourUsername with your actual GitHub username)
-  # Note: You might be prompted for GitHub credentials if using HTTPS without caching.
-  # git clone https://github.com/YourUsername/circuit_training.git DeepRune
-  git clone https://github.com/WillForEternity/DeepRune.git DeepRune
+# Clone your fork
+git clone https://github.com/WillForEternity/DeepRune.git DeepRune
 
-  # Navigate into the cloned directory
-  cd DeepRune
+# Navigate into the cloned directory
+cd DeepRune
 
-  # (Optional but good practice) Add the original repository as 'upstream'
-  git remote add upstream https://github.com/google-research/circuit_training.git
+# Add the original repository as 'upstream'
+git remote add upstream https://github.com/google-research/circuit_training.git
 
-  # Fetch the specific stable tag/branch (r0.0.4) we want to build against
-  # This ensures compatibility with the documented dependencies for the stable build.
-  git fetch upstream r0.0.4:r0.0.4
+# Fetch the stable tag/branch (r0.0.4)
+git fetch upstream r0.0.4:r0.0.4
 
-  # Checkout the fetched stable branch
-  git checkout r0.0.4
+# Checkout the fetched stable branch
+git checkout r0.0.4
+```
 
-3. Set Environment Variables
+### 3. Set Environment Variables
 
-Define environment variables needed for the Docker build process, matching the r0.0.4 version requirements.
+Define environment variables needed for the Docker build process:
 
-  # Version of Circuit Training being used
-  export CT_VERSION=0.0.4
+```bash
+# Version of Circuit Training being used
+export CT_VERSION=0.0.4
 
-  # Python version used in the stable Dockerfile
-  export PYTHON_VERSION=python3.9
+# Python version used in the stable Dockerfile
+export PYTHON_VERSION=python3.9
 
-  # Specific DREAMPlace binary pattern for the stable version
-  export DREAMPLACE_PATTERN=dreamplace_20231214_c5a83e5_${PYTHON_VERSION}.tar.gz
+# Specific DREAMPlace binary pattern
+export DREAMPLACE_PATTERN=dreamplace_20231214_c5a83e5_${PYTHON_VERSION}.tar.gz
 
-  # Specific TF-Agents version compatible with CT v0.0.4
-  export TF_AGENTS_PIP_VERSION=tf-agents[reverb]~=0.19.0
+# Specific TF-Agents version compatible with CT v0.0.4
+export TF_AGENTS_PIP_VERSION=tf-agents[reverb]~=0.19.0
 
-  # Path to the repository root on the remote machine
-  export REPO_ROOT=$(pwd)
+# Path to the repository root
+export REPO_ROOT=$(pwd)
 
-  # (Used for the GPU build) Base CUDA image
-  export GPU_BASE_IMAGE=nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+# Base CUDA image
+export GPU_BASE_IMAGE=nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+```
 
-4. Build Docker Images
+### 4. Build Docker Images
 
-Two Docker images were built:
-*   circuit_training:core: Based on Ubuntu 20.04, suitable for CPU tasks like the Reverb server or collectors.
-*   circuit_training:gpu: Based on an NVIDIA CUDA image, required for GPU training.
+Two Docker images need to be built:
 
-  # Build the CORE (CPU) image
-  docker build --pull --no-cache --tag circuit_training:core \
-      --build-arg tf_agents_version="${TF_AGENTS_PIP_VERSION}" \
-      --build-arg dreamplace_version="${DREAMPLACE_PATTERN}" \
-      --build-arg placement_cost_binary="plc_wrapper_main_${CT_VERSION}" \
-      -f "${REPO_ROOT}"/tools/docker/ubuntu_circuit_training ${REPO_ROOT}/tools/docker/
+```bash
+# Build the CORE (CPU) image
+docker build --pull --no-cache --tag circuit_training:core \
+    --build-arg tf_agents_version="${TF_AGENTS_PIP_VERSION}" \
+    --build-arg dreamplace_version="${DREAMPLACE_PATTERN}" \
+    --build-arg placement_cost_binary="plc_wrapper_main_${CT_VERSION}" \
+    -f "${REPO_ROOT}"/tools/docker/ubuntu_circuit_training ${REPO_ROOT}/tools/docker/
 
-  # Build the GPU image
-  docker build --pull --no-cache --tag circuit_training:gpu \
-      --build-arg base_image=${GPU_BASE_IMAGE} \
-      --build-arg tf_agents_version="${TF_AGENTS_PIP_VERSION}" \
-      --build-arg dreamplace_version="${DREAMPLACE_PATTERN}" \
-      --build-arg placement_cost_binary="plc_wrapper_main_${CT_VERSION}" \
-      -f "${REPO_ROOT}"/tools/docker/ubuntu_circuit_training ${REPO_ROOT}/tools/docker/
+# Build the GPU image
+docker build --pull --no-cache --tag circuit_training:gpu \
+    --build-arg base_image=${GPU_BASE_IMAGE} \
+    --build-arg tf_agents_version="${TF_AGENTS_PIP_VERSION}" \
+    --build-arg dreamplace_version="${DREAMPLACE_PATTERN}" \
+    --build-arg placement_cost_binary="plc_wrapper_main_${CT_VERSION}" \
+    -f "${REPO_ROOT}"/tools/docker/ubuntu_circuit_training ${REPO_ROOT}/tools/docker/
+```
 
-*Both builds completed successfully.*
+### 5. Push Images to Docker Hub (Recommended)
 
-5. Push Images to Docker Hub (Recommended for Fast Restart)
+Save the built images for reuse:
 
-To save the built images for reuse on other machines or after terminating this instance, push them to Docker Hub.
+```bash
+# Login to Docker Hub
+docker login
 
-  # Login to Docker Hub (will prompt for credentials or use web login)
-  docker login
+# Tag the images with your Docker Hub username
+docker tag circuit_training:core yourdockerhubusername/deeprune:core-v0.0.4
+docker tag circuit_training:gpu yourdockerhubusername/deeprune:gpu-v0.0.4
 
-  # Tag the images with YourDockerHubUsername/repository:tag
-  docker tag circuit_training:core yourdockerhubusername/deeprune:core-v0.0.4
-  docker tag circuit_training:gpu yourdockerhubusername/deeprune:gpu-v0.0.4
-  # Example used:
-  # docker tag circuit_training:core willforeternity/circuit_training:core-v0.0.4
-  # docker tag circuit_training:gpu willforeternity/circuit_training:gpu-v0.0.4
+# Example used:
+# docker tag circuit_training:core willforeternity/circuit_training:core-v0.0.4
+# docker tag circuit_training:gpu willforeternity/circuit_training:gpu-v0.0.4
 
-  # Push the images
-  docker push yourdockerhubusername/deeprune:core-v0.0.4
-  docker push yourdockerhubusername/deeprune:gpu-v0.0.4
-  # Example used:
-  # docker push willforeternity/circuit_training:core-v0.0.4
-  # docker push willforeternity/circuit_training:gpu-v0.0.4
+# Push the images
+docker push yourdockerhubusername/deeprune:core-v0.0.4
+docker push yourdockerhubusername/deeprune:gpu-v0.0.4
 
-*Replace yourdockerhubusername/deeprune with your desired Docker Hub repository name.*
-*Login and push operations were successful in the initial run.*
+# Example used:
+# docker push willforeternity/circuit_training:core-v0.0.4
+# docker push willforeternity/circuit_training:gpu-v0.0.4
+```
 
-6. Run the Smoke Test
+*Replace yourdockerhubusername/deeprune with your Docker Hub repository name.*
 
-The end-to-end smoke test verifies the core training loop using the built Docker environment.
+### 6. Run the Smoke Test
 
-  # Ensure you are in the DeepRune directory
-  cd ~/DeepRune
+Verify the core training loop using the built Docker environment:
 
-  # Create the logs directory (REPO_ROOT should still be set)
-  mkdir -p ${REPO_ROOT}/logs
+```bash
+# Ensure you are in the DeepRune directory
+cd ~/DeepRune
 
-  # Execute the Smoke Test Script inside the GPU container
-  docker run \
-    --rm \
-    --gpus all \
-    -v ${REPO_ROOT}:/workspace \
-    --workdir /workspace \
-    circuit_training:gpu \
-    bash tools/e2e_smoke_test.sh --root_dir /workspace/logs
+# Create the logs directory
+mkdir -p ${REPO_ROOT}/logs
 
-7. Verification
+# Execute the Smoke Test Script inside the GPU container
+docker run \
+  --rm \
+  --gpus all \
+  -v ${REPO_ROOT}:/workspace \
+  --workdir /workspace \
+  circuit_training:gpu \
+  bash tools/e2e_smoke_test.sh --root_dir /workspace/logs
+```
 
-The smoke test ran successfully, completing in approximately 14 minutes and exiting cleanly without errors, confirming the basic setup works.
+### 7. Verification
 
----
+The smoke test should complete in approximately 14 minutes without errors, confirming the setup works.
 
-STOPPING THE INSTANCE
+## Stopping the Instance
 
 To stop incurring charges and save the state for a quick restart:
 
-1.  (Optional) Backup Data: Download any critical generated data (like logs from ${REPO_ROOT}/logs) from the instance using scp or the VSCode download feature if needed. Code should ideally be committed and pushed to GitHub.
-2.  Stop Running Containers: (Good practice, though termination handles it)
-    docker stop $(docker ps -q)
-3.  Terminate Instance: Use your cloud provider's dashboard (e.g., Lambda Labs) to Terminate the instance. This usually stops billing completely but also deletes the instance's local storage.
+1. **Backup Data** (Optional): Download any critical generated data from the instance
+2. **Stop Running Containers**: `docker stop $(docker ps -q)`
+3. **Terminate Instance**: Use your cloud provider's dashboard to terminate the instance
 
----
+## Restarting Quickly on a New Instance
 
-RESTARTING QUICKLY ON A NEW INSTANCE
+These steps allow you to quickly get the environment running again on a newly launched cloud instance:
 
-These steps allow you to quickly get the environment running again on a *different* (newly launched) cloud instance, leveraging the work saved to GitHub and Docker Hub.
+### 1. Launch New Instance
+- Provision a new GPU instance from your chosen provider
+- Select an OS image that includes Docker and appropriate NVIDIA drivers/CUDA toolkit
 
-1. Launch New Instance:
-    *   Provision a new GPU instance from your chosen provider.
-    *   Crucially, select an OS image that includes Docker and appropriate NVIDIA drivers/CUDA toolkit. (e.g., "Ubuntu + Docker + CUDA" or similar).
+### 2. Connect via SSH
+```bash
+ssh user@<new_instance_ip_address>
+```
 
-2. Connect via SSH:
-    *   Obtain the SSH connection details for the new instance.
-    *   Connect using your SSH client: ssh user@<new_instance_ip_address> ...
+### 3. Install Git (If Necessary)
+```bash
+# Check if git is installed
+git --version
+# If not installed
+sudo apt update && sudo apt install git -y
+```
 
-3. Install Git (If Necessary):
-    *   Check if git is installed (git --version). If not:
-        sudo apt update && sudo apt install git -y
+### 4. Clone Your Repository
+```bash
+git clone https://github.com/WillForEternity/DeepRune.git DeepRune
+cd DeepRune
+# Optional: Checkout a specific branch/tag if needed
+# git checkout r0.0.4
+```
 
-4. Clone Your Repository:
-    *   Clone your DeepRune fork from GitHub.
-        git clone https://github.com/WillForEternity/DeepRune.git DeepRune
-        cd DeepRune
-        # Optional: Checkout a specific branch/tag if needed
-        # git checkout r0.0.4
+### 5. Pull Pre-Built Docker Images
+```bash
+# Login to Docker Hub
+docker login
 
-5. Pull Pre-Built Docker Image:
-    *   Log in to Docker Hub: docker login
-    *   Pull the required image(s) you pushed earlier. This avoids the lengthy build step.
-        # Pull the GPU image (most commonly needed)
-        docker pull yourdockerhubusername/deeprune:gpu-v0.0.4
-        # Example used:
-        # docker pull willforeternity/circuit_training:gpu-v0.0.4
+# Pull the GPU image
+docker pull yourdockerhubusername/deeprune:gpu-v0.0.4
+# Example: docker pull willforeternity/circuit_training:gpu-v0.0.4
 
-        # Pull the CPU image if needed for Reverb/Collectors
-        docker pull yourdockerhubusername/deeprune:core-v0.0.4
-        # Example used:
-        # docker pull willforeternity/circuit_training:core-v0.0.4
+# Pull the CPU image if needed
+docker pull yourdockerhubusername/deeprune:core-v0.0.4
+# Example: docker pull willforeternity/circuit_training:core-v0.0.4
+```
 
-6. (Recommended) Tag Pulled Images:
-    *   Apply the simpler tags that the run scripts often expect.
-        docker tag yourdockerhubusername/deeprune:gpu-v0.0.4 circuit_training:gpu
-        docker tag yourdockerhubusername/deeprune:core-v0.0.4 circuit_training:core
-        # Example used:
-        # docker tag willforeternity/circuit_training:gpu-v0.0.4 circuit_training:gpu
-        # docker tag willforeternity/circuit_training:core-v0.0.4 circuit_training:core
+### 6. Tag Pulled Images
+```bash
+docker tag yourdockerhubusername/deeprune:gpu-v0.0.4 circuit_training:gpu
+docker tag yourdockerhubusername/deeprune:core-v0.0.4 circuit_training:core
 
-7. Set Environment Variables:
-    *   Define the repository root path for the current session.
-        # Ensure you are in the ~/DeepRune directory
-        export REPO_ROOT=$(pwd)
-    *   Set any other runtime variables needed (e.g., REVERB_SERVER, NETLIST_FILE if running the distributed example).
+# Example:
+# docker tag willforeternity/circuit_training:gpu-v0.0.4 circuit_training:gpu
+# docker tag willforeternity/circuit_training:core-v0.0.4 circuit_training:core
+```
 
-8. Ready to Run:
-    *   The environment is now ready. You can directly execute docker run commands using the pulled and tagged images (circuit_training:gpu or circuit_training:core).
-    *   For example, to verify by re-running the smoke test:
-        mkdir -p ${REPO_ROOT}/logs
-        docker run --rm --gpus all -v ${REPO_ROOT}:/workspace --workdir /workspace circuit_training:gpu \
-          bash tools/e2e_smoke_test.sh --root_dir /workspace/logs
+### 7. Set Environment Variables
+```bash
+# Ensure you are in the ~/DeepRune directory
+export REPO_ROOT=$(pwd)
+# Set any other runtime variables needed
+```
+
+### 8. Ready to Run
+Verify by re-running the smoke test:
+```bash
+mkdir -p ${REPO_ROOT}/logs
+docker run --rm --gpus all -v ${REPO_ROOT}:/workspace --workdir /workspace circuit_training:gpu \
+  bash tools/e2e_smoke_test.sh --root_dir /workspace/logs
+```
 
 This restart process should only take a few minutes (dominated by instance boot time and image pulling) compared to the initial setup involving lengthy Docker builds.
 
